@@ -6,7 +6,7 @@ const mongodbConfig = {
 	url: 'mongodb://localhost:27017',
 	databaseName: 'miBaseDeDatos',
 	collectionName: 'miColeccion',
-	numberOfDocuments: 10000,
+	numberOfDocuments: 100000,
 };
 
 const mysqlConfig = {
@@ -17,12 +17,11 @@ const mysqlConfig = {
 };
 
 const tableName = 'Users';
-const numberOfRecords = 1000;
+const numberOfRecords = 100000;
 
 async function connectToMongoDB() {
 	const client = new MongoClient(mongodbConfig.url, { useUnifiedTopology: true });
 	await client.connect();
-	console.log('Conectado a MongoDB');
 	return client;
 }
 
@@ -49,8 +48,7 @@ async function insertDocuments(client) {
 
 	const endTime = Date.now();
 	const duration = endTime - startTime;
-	console.log(`Inserción en MongoDB completada en ${duration} milisegundos`);
-	console.log(`Número de registros insertados en MongoDB: ${finalDocumentCount - initialDocumentCount}`);
+	return duration;
 }
 
 async function readDocuments(client) {
@@ -63,13 +61,11 @@ async function readDocuments(client) {
 
 	const endTime = Date.now();
 	const duration = endTime - startTime;
-	console.log(`Lectura en MongoDB completada en ${duration} milisegundos`);
-	console.log(`Número total de registros en MongoDB: ${documents.length}`);
+	return duration;
 }
 
 async function closeMongoDBConnection(client) {
 	await client.close();
-	console.log('Conexión cerrada con MongoDB');
 }
 
 function generateRandomData(index) {
@@ -80,10 +76,11 @@ function generateRandomData(index) {
 	];
 }
 
+let connection;
+
 async function connectToMySQL() {
-	const connection = mysql.createConnection(mysqlConfig);
+	connection = mysql.createConnection(mysqlConfig);
 	connection.connect();
-	console.log('Conectado a MySQL');
 	return connection;
 }
 
@@ -112,38 +109,50 @@ async function insertRecords(connection) {
 
 		const endTime = Date.now();
 		const duration = endTime - startTime;
-		console.log(`Inserción en MySQL completada en ${duration} milisegundos`);
+		return duration;
 	} catch (error) {
 		console.error('Error al insertar datos en MySQL:', error);
-	} finally {
-		connection.end();
-		console.log('Conexión cerrada con MySQL');
 	}
 }
 
 async function readRecords(connection) {
 	const startTime = Date.now();
 
-	const [rows] = await connection.promise().execute(`SELECT * FROM ${tableName}`);
-
-	const endTime = Date.now();
-	const duration = endTime - startTime;
-	console.log(`Lectura en MySQL completada en ${duration} milisegundos`);
-	console.log(`Número total de registros en MySQL: ${rows.length}`);
+	try {
+		await connection.promise().execute(`SELECT * FROM ${tableName}`);
+		const endTime = Date.now();
+		const duration = endTime - startTime;
+		return duration;
+	} catch (error) {
+		console.error('Error al leer datos en MySQL:', error);
+	}
 }
 
 async function main() {
 	try {
 		const mongoClient = await connectToMongoDB();
-		await insertDocuments(mongoClient);
-		await readDocuments(mongoClient);
+		const mongoInsertDuration = await insertDocuments(mongoClient);
+		const mongoReadDuration = await readDocuments(mongoClient);
 		await closeMongoDBConnection(mongoClient);
 
 		const mysqlConnection = await connectToMySQL();
-		await insertRecords(mysqlConnection);
-		await readRecords(mysqlConnection);
+		const mysqlInsertDuration = await insertRecords(mysqlConnection);
+		const mysqlReadDuration = await readRecords(mysqlConnection);
+
+		const table = new Table({
+			head: ['Operación', 'MongoDB (ms)', 'MySQL (ms)'],
+		});
+
+		table.push(
+			['Inserción', mongoInsertDuration, mysqlInsertDuration],
+			['Lectura', mongoReadDuration, mysqlReadDuration]
+		);
+
+		console.log(table.toString());
 	} catch (error) {
 		console.error('Error en el programa:', error);
+	} finally {
+		connection.end();
 	}
 }
 
